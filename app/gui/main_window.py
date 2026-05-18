@@ -1,5 +1,7 @@
 import customtkinter as ctk
 
+from app.core.diagnostics import format_diagnostics, run_diagnostics
+
 
 class MainWindow(ctk.CTk):
     def __init__(self) -> None:
@@ -16,6 +18,8 @@ class MainWindow(ctk.CTk):
         self.current_role = "Viewer"
         self.current_mode = "Test"
 
+        self.diagnostics_output: ctk.CTkTextbox | None = None
+
         self._build_layout()
 
     def _build_layout(self) -> None:
@@ -24,7 +28,10 @@ class MainWindow(ctk.CTk):
 
         self._build_sidebar()
         self._build_topbar()
-        self._build_content()
+        self._show_default_section(
+            title="API Tester",
+            description="Test Wildberries API methods here.",
+        )
 
     def _build_sidebar(self) -> None:
         self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0)
@@ -82,43 +89,99 @@ class MainWindow(ctk.CTk):
         )
         self.status_label.grid(row=0, column=1, padx=24, pady=18, sticky="e")
 
-    def _build_content(self) -> None:
-        self.content = ctk.CTkFrame(self, corner_radius=12)
-        self.content.grid(row=1, column=1, sticky="nsew", padx=20, pady=20)
-        self.content.grid_columnconfigure(0, weight=1)
-        self.content.grid_rowconfigure(1, weight=1)
+    def _clear_content(self) -> None:
+        for widget in self.winfo_children():
+            if widget.grid_info().get("row") == 1 and widget.grid_info().get("column") == 1:
+                widget.destroy()
 
-        self.section_title = ctk.CTkLabel(
-            self.content,
-            text="API Tester",
+    def _create_content_frame(self) -> ctk.CTkFrame:
+        self._clear_content()
+
+        content = ctk.CTkFrame(self, corner_radius=12)
+        content.grid(row=1, column=1, sticky="nsew", padx=20, pady=20)
+        content.grid_columnconfigure(0, weight=1)
+        content.grid_rowconfigure(2, weight=1)
+
+        return content
+
+    def _show_default_section(self, title: str, description: str) -> None:
+        content = self._create_content_frame()
+
+        section_title = ctk.CTkLabel(
+            content,
+            text=title,
             font=ctk.CTkFont(size=28, weight="bold"),
         )
-        self.section_title.grid(row=0, column=0, padx=30, pady=(30, 10), sticky="w")
+        section_title.grid(row=0, column=0, padx=30, pady=(30, 10), sticky="w")
 
-        self.section_description = ctk.CTkLabel(
-            self.content,
-            text="Test Wildberries API methods here.",
+        section_description = ctk.CTkLabel(
+            content,
+            text=description,
             font=ctk.CTkFont(size=16),
             justify="left",
         )
-        self.section_description.grid(row=1, column=0, padx=30, pady=10, sticky="nw")
+        section_description.grid(row=1, column=0, padx=30, pady=10, sticky="nw")
+
+    def _show_diagnostics_section(self) -> None:
+        content = self._create_content_frame()
+
+        title = ctk.CTkLabel(
+            content,
+            text="Diagnostics",
+            font=ctk.CTkFont(size=28, weight="bold"),
+        )
+        title.grid(row=0, column=0, padx=30, pady=(30, 10), sticky="w")
+
+        run_button = ctk.CTkButton(
+            content,
+            text="Run Diagnostics",
+            height=40,
+            command=self._run_diagnostics,
+        )
+        run_button.grid(row=1, column=0, padx=30, pady=10, sticky="w")
+
+        self.diagnostics_output = ctk.CTkTextbox(content, height=360)
+        self.diagnostics_output.grid(
+            row=2,
+            column=0,
+            padx=30,
+            pady=(10, 30),
+            sticky="nsew",
+        )
+        self.diagnostics_output.insert(
+            "1.0",
+            "Click Run Diagnostics to check the local app environment.",
+        )
+
+    def _run_diagnostics(self) -> None:
+        if self.diagnostics_output is None:
+            return
+
+        results = run_diagnostics()
+        output = format_diagnostics(results)
+
+        self.diagnostics_output.delete("1.0", "end")
+        self.diagnostics_output.insert("1.0", output)
 
     def show_section(self, section_name: str) -> None:
         self.current_section = section_name
         self.title_label.configure(text=section_name)
-        self.section_title.configure(text=section_name)
 
         descriptions = {
             "API Tester": "Test Wildberries API methods here.",
             "Keys": "Manage temporary, saved and encrypted API keys here.",
             "Imports": "Import local JSON, CSV and Excel files here.",
             "History": "View API request history and saved responses here.",
-            "Diagnostics": "Run environment, database, permissions and key storage checks here.",
             "Settings": "Configure app settings, storage modes and access rules here.",
         }
 
-        self.section_description.configure(
-            text=descriptions.get(section_name, "Section is under development.")
+        if section_name == "Diagnostics":
+            self._show_diagnostics_section()
+            return
+
+        self._show_default_section(
+            title=section_name,
+            description=descriptions.get(section_name, "Section is under development."),
         )
 
 
