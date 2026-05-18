@@ -1,0 +1,19 @@
+﻿[project]
+name = "wb-api-workbench"
+version = "0.1.0"
+description = "Local GUI workbench for Wildberries API"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "pydantic",
+    "sqlalchemy",
+    "python-dotenv",
+    "keyring",
+    "cryptography",
+    "customtkinter",
+    "pytest"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
