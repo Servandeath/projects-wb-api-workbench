@@ -1,6 +1,7 @@
 import customtkinter as ctk
 
 from app.core.diagnostics import format_diagnostics, run_diagnostics
+from app.core.settings import AppMode, UserRole, apply_settings
 
 
 class MainWindow(ctk.CTk):
@@ -15,10 +16,14 @@ class MainWindow(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         self.current_section = "API Tester"
-        self.current_role = "Viewer"
-        self.current_mode = "Test"
+        self.current_role = UserRole.VIEWER.value
+        self.current_mode = AppMode.TEST.value
 
         self.diagnostics_output: ctk.CTkTextbox | None = None
+
+        self.role_option: ctk.CTkOptionMenu | None = None
+        self.mode_option: ctk.CTkOptionMenu | None = None
+        self.settings_message_label: ctk.CTkLabel | None = None
 
         self._build_layout()
 
@@ -76,18 +81,22 @@ class MainWindow(ctk.CTk):
         )
         self.title_label.grid(row=0, column=0, padx=24, pady=18, sticky="w")
 
-        status_text = (
+        self.status_label = ctk.CTkLabel(
+            self.topbar,
+            text=self._get_status_text(),
+            font=ctk.CTkFont(size=13),
+        )
+        self.status_label.grid(row=0, column=1, padx=24, pady=18, sticky="e")
+
+    def _get_status_text(self) -> str:
+        return (
             f"Role: {self.current_role}  |  "
             f"Mode: {self.current_mode}  |  "
             "Key: not set"
         )
 
-        self.status_label = ctk.CTkLabel(
-            self.topbar,
-            text=status_text,
-            font=ctk.CTkFont(size=13),
-        )
-        self.status_label.grid(row=0, column=1, padx=24, pady=18, sticky="e")
+    def _update_status_label(self) -> None:
+        self.status_label.configure(text=self._get_status_text())
 
     def _clear_content(self) -> None:
         for widget in self.winfo_children():
@@ -163,6 +172,100 @@ class MainWindow(ctk.CTk):
         self.diagnostics_output.delete("1.0", "end")
         self.diagnostics_output.insert("1.0", output)
 
+    def _show_settings_section(self) -> None:
+        content = self._create_content_frame()
+
+        title = ctk.CTkLabel(
+            content,
+            text="Settings",
+            font=ctk.CTkFont(size=28, weight="bold"),
+        )
+        title.grid(row=0, column=0, padx=30, pady=(30, 10), sticky="w")
+
+        description = ctk.CTkLabel(
+            content,
+            text="Configure manager role and API mode.",
+            font=ctk.CTkFont(size=16),
+            justify="left",
+        )
+        description.grid(row=1, column=0, padx=30, pady=10, sticky="w")
+
+        form = ctk.CTkFrame(content, corner_radius=12)
+        form.grid(row=2, column=0, padx=30, pady=20, sticky="nw")
+        form.grid_columnconfigure(1, weight=1)
+
+        role_label = ctk.CTkLabel(form, text="Role:")
+        role_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
+
+        self.role_option = ctk.CTkOptionMenu(
+            form,
+            values=[role.value for role in UserRole],
+        )
+        self.role_option.set(self.current_role)
+        self.role_option.grid(row=0, column=1, padx=20, pady=15, sticky="w")
+
+        mode_label = ctk.CTkLabel(form, text="Mode:")
+        mode_label.grid(row=1, column=0, padx=20, pady=15, sticky="w")
+
+        self.mode_option = ctk.CTkOptionMenu(
+            form,
+            values=[mode.value for mode in AppMode],
+        )
+        self.mode_option.set(self.current_mode)
+        self.mode_option.grid(row=1, column=1, padx=20, pady=15, sticky="w")
+
+        apply_button = ctk.CTkButton(
+            form,
+            text="Apply Settings",
+            height=40,
+            command=self._apply_settings_from_gui,
+        )
+        apply_button.grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            padx=20,
+            pady=20,
+            sticky="w",
+        )
+
+        self.settings_message_label = ctk.CTkLabel(
+            form,
+            text="Viewer and Tester can use Test mode only.",
+            font=ctk.CTkFont(size=13),
+        )
+        self.settings_message_label.grid(
+            row=3,
+            column=0,
+            columnspan=2,
+            padx=20,
+            pady=(0, 20),
+            sticky="w",
+        )
+
+    def _apply_settings_from_gui(self) -> None:
+        if self.role_option is None or self.mode_option is None:
+            return
+
+        selected_role = UserRole(self.role_option.get())
+        selected_mode = AppMode(self.mode_option.get())
+
+        try:
+            role, mode = apply_settings(selected_role, selected_mode)
+        except PermissionError as error:
+            if self.settings_message_label is not None:
+                self.settings_message_label.configure(text=str(error))
+            return
+
+        self.current_role = role.value
+        self.current_mode = mode.value
+        self._update_status_label()
+
+        if self.settings_message_label is not None:
+            self.settings_message_label.configure(
+                text=f"Applied: {self.current_role} / {self.current_mode}"
+            )
+
     def show_section(self, section_name: str) -> None:
         self.current_section = section_name
         self.title_label.configure(text=section_name)
@@ -177,6 +280,10 @@ class MainWindow(ctk.CTk):
 
         if section_name == "Diagnostics":
             self._show_diagnostics_section()
+            return
+
+        if section_name == "Settings":
+            self._show_settings_section()
             return
 
         self._show_default_section(
