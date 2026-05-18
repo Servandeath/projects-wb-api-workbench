@@ -1,7 +1,8 @@
-import customtkinter as ctk
+﻿import customtkinter as ctk
 
 from app.core.diagnostics import format_diagnostics, run_diagnostics
 from app.core.settings import AppMode, UserRole, apply_settings
+from app.core.users import UserAccount, can_manage_users, create_user
 
 
 class MainWindow(ctk.CTk):
@@ -19,11 +20,20 @@ class MainWindow(ctk.CTk):
         self.current_role = UserRole.VIEWER.value
         self.current_mode = AppMode.TEST.value
 
+        self.user_accounts: list[UserAccount] = [
+            create_user("admin", UserRole.ADMIN),
+        ]
+
         self.diagnostics_output: ctk.CTkTextbox | None = None
 
         self.role_option: ctk.CTkOptionMenu | None = None
         self.mode_option: ctk.CTkOptionMenu | None = None
         self.settings_message_label: ctk.CTkLabel | None = None
+
+        self.new_username_entry: ctk.CTkEntry | None = None
+        self.new_user_role_option: ctk.CTkOptionMenu | None = None
+        self.users_output: ctk.CTkTextbox | None = None
+        self.users_message_label: ctk.CTkLabel | None = None
 
         self._build_layout()
 
@@ -57,6 +67,7 @@ class MainWindow(ctk.CTk):
             "History",
             "Diagnostics",
             "Settings",
+            "Users",
         ]
 
         for section in sections:
@@ -266,6 +277,131 @@ class MainWindow(ctk.CTk):
                 text=f"Applied: {self.current_role} / {self.current_mode}"
             )
 
+    def _show_users_section(self) -> None:
+        current_role = UserRole(self.current_role)
+
+        if not can_manage_users(current_role):
+            self._show_default_section(
+                title="Users",
+                description="Access denied. Only Admin can manage user accounts.",
+            )
+            return
+
+        content = self._create_content_frame()
+
+        title = ctk.CTkLabel(
+            content,
+            text="Users",
+            font=ctk.CTkFont(size=28, weight="bold"),
+        )
+        title.grid(row=0, column=0, padx=30, pady=(30, 10), sticky="w")
+
+        description = ctk.CTkLabel(
+            content,
+            text="Create and review manager accounts. Data is temporary for this app session.",
+            font=ctk.CTkFont(size=16),
+            justify="left",
+        )
+        description.grid(row=1, column=0, padx=30, pady=10, sticky="w")
+
+        form = ctk.CTkFrame(content, corner_radius=12)
+        form.grid(row=2, column=0, padx=30, pady=20, sticky="nw")
+        form.grid_columnconfigure(1, weight=1)
+
+        username_label = ctk.CTkLabel(form, text="Username:")
+        username_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
+
+        self.new_username_entry = ctk.CTkEntry(form, width=240)
+        self.new_username_entry.grid(row=0, column=1, padx=20, pady=15, sticky="w")
+
+        role_label = ctk.CTkLabel(form, text="Role:")
+        role_label.grid(row=1, column=0, padx=20, pady=15, sticky="w")
+
+        self.new_user_role_option = ctk.CTkOptionMenu(
+            form,
+            values=[role.value for role in UserRole],
+        )
+        self.new_user_role_option.set(UserRole.TESTER.value)
+        self.new_user_role_option.grid(row=1, column=1, padx=20, pady=15, sticky="w")
+
+        create_button = ctk.CTkButton(
+            form,
+            text="Create User",
+            height=40,
+            command=self._create_user_from_gui,
+        )
+        create_button.grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            padx=20,
+            pady=20,
+            sticky="w",
+        )
+
+        self.users_message_label = ctk.CTkLabel(
+            form,
+            text="Only Admin can create users.",
+            font=ctk.CTkFont(size=13),
+        )
+        self.users_message_label.grid(
+            row=3,
+            column=0,
+            columnspan=2,
+            padx=20,
+            pady=(0, 20),
+            sticky="w",
+        )
+
+        self.users_output = ctk.CTkTextbox(content, height=220)
+        self.users_output.grid(
+            row=3,
+            column=0,
+            padx=30,
+            pady=(0, 30),
+            sticky="nsew",
+        )
+
+        self._refresh_users_list()
+
+    def _create_user_from_gui(self) -> None:
+        if self.new_username_entry is None or self.new_user_role_option is None:
+            return
+
+        username = self.new_username_entry.get()
+        role = UserRole(self.new_user_role_option.get())
+
+        try:
+            user = create_user(username, role)
+        except ValueError as error:
+            if self.users_message_label is not None:
+                self.users_message_label.configure(text=str(error))
+            return
+
+        self.user_accounts.append(user)
+        self.new_username_entry.delete(0, "end")
+
+        if self.users_message_label is not None:
+            self.users_message_label.configure(
+                text=f"Created user: {user.username} / {user.role.value}"
+            )
+
+        self._refresh_users_list()
+
+    def _refresh_users_list(self) -> None:
+        if self.users_output is None:
+            return
+
+        lines = []
+        for index, user in enumerate(self.user_accounts, start=1):
+            status = "active" if user.is_active else "inactive"
+            lines.append(f"{index}. {user.username} | {user.role.value} | {status}")
+
+        output = "\n".join(lines)
+
+        self.users_output.delete("1.0", "end")
+        self.users_output.insert("1.0", output)
+
     def show_section(self, section_name: str) -> None:
         self.current_section = section_name
         self.title_label.configure(text=section_name)
@@ -276,6 +412,7 @@ class MainWindow(ctk.CTk):
             "Imports": "Import local JSON, CSV and Excel files here.",
             "History": "View API request history and saved responses here.",
             "Settings": "Configure app settings, storage modes and access rules here.",
+            "Users": "Manage manager accounts and roles here.",
         }
 
         if section_name == "Diagnostics":
@@ -284,6 +421,10 @@ class MainWindow(ctk.CTk):
 
         if section_name == "Settings":
             self._show_settings_section()
+            return
+
+        if section_name == "Users":
+            self._show_users_section()
             return
 
         self._show_default_section(
