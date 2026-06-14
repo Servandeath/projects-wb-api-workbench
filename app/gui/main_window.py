@@ -2,7 +2,9 @@
 
 from app.core.diagnostics import format_diagnostics, run_diagnostics
 from app.core.settings import AppMode, UserRole, apply_settings
-from app.core.users import UserAccount, can_manage_users, create_user
+from app.config import USERS_FILE
+from app.core.user_store import load_users, save_users
+from app.core.users import UserAccount, add_user, can_manage_users, create_user
 
 
 class MainWindow(ctk.CTk):
@@ -20,9 +22,7 @@ class MainWindow(ctk.CTk):
         self.current_role = UserRole.VIEWER.value
         self.current_mode = AppMode.TEST.value
 
-        self.user_accounts: list[UserAccount] = [
-            create_user("admin", UserRole.ADMIN),
-        ]
+        self.user_accounts: list[UserAccount] = []
 
         self.diagnostics_output: ctk.CTkTextbox | None = None
 
@@ -36,7 +36,17 @@ class MainWindow(ctk.CTk):
         self.users_message_label: ctk.CTkLabel | None = None
 
         self._build_layout()
+        self._load_users_on_start()
 
+    def _load_users_on_start(self) -> None:
+        self.user_accounts = load_users(USERS_FILE)
+
+        has_admin = any(
+            user.role == UserRole.ADMIN for user in self.user_accounts
+        )
+        if not has_admin:
+            self.user_accounts.append(create_user("admin", UserRole.ADMIN))
+            save_users(USERS_FILE, self.user_accounts)
     def _build_layout(self) -> None:
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -372,13 +382,13 @@ class MainWindow(ctk.CTk):
         role = UserRole(self.new_user_role_option.get())
 
         try:
-            user = create_user(username, role)
+            user = add_user(self.user_accounts, username, role)
         except ValueError as error:
             if self.users_message_label is not None:
                 self.users_message_label.configure(text=str(error))
             return
 
-        self.user_accounts.append(user)
+        save_users(USERS_FILE, self.user_accounts)
         self.new_username_entry.delete(0, "end")
 
         if self.users_message_label is not None:
