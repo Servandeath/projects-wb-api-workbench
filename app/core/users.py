@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 
 from app.core.settings import UserRole
 
@@ -14,11 +14,40 @@ def can_manage_users(role: UserRole) -> bool:
     return role == UserRole.ADMIN
 
 
+def normalize_username(username: str) -> str:
+    return username.strip()
+
+
+def username_exists(users: list[UserAccount], username: str) -> bool:
+    normalized_username = normalize_username(username)
+
+    return any(
+        user.username.lower() == normalized_username.lower()
+        for user in users
+    )
+
+
 def create_user(username: str, role: UserRole) -> UserAccount:
-    if not username.strip():
+    normalized_username = normalize_username(username)
+
+    if not normalized_username:
         raise ValueError("Username cannot be empty")
 
-    return UserAccount(username=username.strip(), role=role)
+    return UserAccount(username=normalized_username, role=role)
+
+
+def add_user(
+    users: list[UserAccount],
+    username: str,
+    role: UserRole,
+) -> UserAccount:
+    if username_exists(users, username):
+        raise ValueError(f"Username already exists: {normalize_username(username)}")
+
+    user = create_user(username, role)
+    users.append(user)
+
+    return user
 
 
 def change_user_role(user: UserAccount, new_role: UserRole) -> UserAccount:
