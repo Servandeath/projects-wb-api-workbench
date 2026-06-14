@@ -12,3 +12,4 @@ DATABASE_URL = f"sqlite:///{DATA_DIR / 'wb_workbench.db'}"
 
 APP_NAME = "WB API Workbench"
 APP_VERSION = "0.1.0"
+USERS_FILE = DATA_DIR / "users.json"

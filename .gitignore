@@ -38,3 +38,6 @@ Thumbs.db
 # Python package metadata
 *.egg-info/
 .eggs/
+
+# User accounts (local runtime data)
+data/users.json
