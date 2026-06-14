@@ -50,6 +50,16 @@ def add_user(
     return user
 
 
+def find_user(users: list[UserAccount], username: str) -> UserAccount | None:
+    normalized_username = normalize_username(username)
+
+    for user in users:
+        if user.username.lower() == normalized_username.lower():
+            return user
+
+    return None
+
+
 def change_user_role(user: UserAccount, new_role: UserRole) -> UserAccount:
     user.role = new_role
     return user

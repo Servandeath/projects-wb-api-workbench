@@ -4,7 +4,15 @@ from app.core.diagnostics import format_diagnostics, run_diagnostics
 from app.core.settings import AppMode, UserRole, apply_settings
 from app.config import USERS_FILE
 from app.core.user_store import load_users, save_users
-from app.core.users import UserAccount, add_user, can_manage_users, create_user
+from app.core.users import (
+    UserAccount,
+    add_user,
+    can_manage_users,
+    change_user_role,
+    create_user,
+    deactivate_user,
+    find_user,
+)
 
 
 class MainWindow(ctk.CTk):
@@ -34,6 +42,9 @@ class MainWindow(ctk.CTk):
         self.new_user_role_option: ctk.CTkOptionMenu | None = None
         self.users_output: ctk.CTkTextbox | None = None
         self.users_message_label: ctk.CTkLabel | None = None
+
+        self.manage_username_entry: ctk.CTkEntry | None = None
+        self.manage_role_option: ctk.CTkOptionMenu | None = None
 
         self._build_layout()
         self._load_users_on_start()
@@ -298,6 +309,8 @@ class MainWindow(ctk.CTk):
             return
 
         content = self._create_content_frame()
+        content.grid_rowconfigure(2, weight=0)
+        content.grid_rowconfigure(3, weight=1)
 
         title = ctk.CTkLabel(
             content,
@@ -363,6 +376,46 @@ class MainWindow(ctk.CTk):
             sticky="w",
         )
 
+        manage_label = ctk.CTkLabel(
+            form,
+            text="Manage existing user:",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        manage_label.grid(row=4, column=0, columnspan=2, padx=20, pady=(10, 5), sticky="w")
+
+        manage_username_label = ctk.CTkLabel(form, text="Target username:")
+        manage_username_label.grid(row=5, column=0, padx=20, pady=15, sticky="w")
+
+        self.manage_username_entry = ctk.CTkEntry(form, width=240)
+        self.manage_username_entry.grid(row=5, column=1, padx=20, pady=15, sticky="w")
+
+        manage_role_label = ctk.CTkLabel(form, text="New role:")
+        manage_role_label.grid(row=6, column=0, padx=20, pady=15, sticky="w")
+
+        self.manage_role_option = ctk.CTkOptionMenu(
+            form,
+            values=[role.value for role in UserRole],
+        )
+        self.manage_role_option.set(UserRole.TESTER.value)
+        self.manage_role_option.grid(row=6, column=1, padx=20, pady=15, sticky="w")
+
+        change_role_button = ctk.CTkButton(
+            form,
+            text="Change Role",
+            height=40,
+            command=self._change_role_from_gui,
+        )
+        change_role_button.grid(row=7, column=0, padx=20, pady=(10, 20), sticky="w")
+
+        deactivate_button = ctk.CTkButton(
+            form,
+            text="Deactivate",
+            height=40,
+            fg_color="#8B3A3A",
+            hover_color="#6E2E2E",
+            command=self._deactivate_user_from_gui,
+        )
+        deactivate_button.grid(row=7, column=1, padx=20, pady=(10, 20), sticky="w")
         self.users_output = ctk.CTkTextbox(content, height=220)
         self.users_output.grid(
             row=3,
@@ -398,6 +451,48 @@ class MainWindow(ctk.CTk):
 
         self._refresh_users_list()
 
+    def _change_role_from_gui(self) -> None:
+        if self.manage_username_entry is None or self.manage_role_option is None:
+            return
+
+        username = self.manage_username_entry.get()
+        new_role = UserRole(self.manage_role_option.get())
+
+        user = find_user(self.user_accounts, username)
+        if user is None:
+            if self.users_message_label is not None:
+                self.users_message_label.configure(text=f"User not found: {username}")
+            return
+
+        change_user_role(user, new_role)
+        save_users(USERS_FILE, self.user_accounts)
+
+        if self.users_message_label is not None:
+            self.users_message_label.configure(
+                text=f"Role changed: {user.username} -> {new_role.value}"
+            )
+
+        self._refresh_users_list()
+
+    def _deactivate_user_from_gui(self) -> None:
+        if self.manage_username_entry is None:
+            return
+
+        username = self.manage_username_entry.get()
+
+        user = find_user(self.user_accounts, username)
+        if user is None:
+            if self.users_message_label is not None:
+                self.users_message_label.configure(text=f"User not found: {username}")
+            return
+
+        deactivate_user(user)
+        save_users(USERS_FILE, self.user_accounts)
+
+        if self.users_message_label is not None:
+            self.users_message_label.configure(text=f"User deactivated: {user.username}")
+
+        self._refresh_users_list()
     def _refresh_users_list(self) -> None:
         if self.users_output is None:
             return

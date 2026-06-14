@@ -4,6 +4,7 @@ from app.core.settings import UserRole
 from app.core.users import (
     UserAccount,
     add_user,
+    find_user,
     can_manage_users,
     change_user_role,
     create_user,
@@ -115,3 +116,30 @@ def test_deactivate_user():
     updated_user = deactivate_user(user)
 
     assert updated_user.is_active is False
+
+
+def test_find_user_returns_user():
+    users = [
+        create_user("manager1", UserRole.TESTER),
+        create_user("manager2", UserRole.OPERATOR),
+    ]
+
+    found = find_user(users, "manager2")
+
+    assert found is not None
+    assert found.username == "manager2"
+
+
+def test_find_user_ignores_case():
+    users = [create_user("Manager1", UserRole.TESTER)]
+
+    found = find_user(users, "manager1")
+
+    assert found is not None
+    assert found.username == "Manager1"
+
+
+def test_find_user_returns_none_when_missing():
+    users = [create_user("manager1", UserRole.TESTER)]
+
+    assert find_user(users, "ghost") is None
