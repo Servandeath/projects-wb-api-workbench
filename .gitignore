@@ -41,3 +41,4 @@ Thumbs.db
 
 # User accounts (local runtime data)
 data/users.json
+app/storage/users.json
