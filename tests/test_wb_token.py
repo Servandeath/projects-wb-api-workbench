@@ -1,0 +1,84 @@
+from app.core.wb_token import (
+    decode_jwt,
+    get_scopes,
+    has_scope,
+    token_info,
+)
+
+
+# Реальный WB-токен (read-only, кабинет 4102012) как золотой образец.
+# Протухает в 2026, но для структуры и разбора битов срок не важен.
+SAMPLE_TOKEN = (
+    "eyJhbGciOiJFUzI1NiIsImtpZCI6IjIwMjYwMzAydjEiLCJ0eXAiOiJKV1QifQ."
+    "eyJhY2MiOjEsImVudCI6MSwiZXhwIjoxNzk3MjgwMDkyLCJpZCI6IjAxOWVjYTY1"
+    "LTNiMzktNzkwOS1hNTAzLWI1OTVmZGZiYTc0NSIsImlpZCI6NDM4ODM3NDMsIm9p"
+    "ZCI6NDEwMjAxMiwicyI6MTA3Mzc0MTgyOCwic2lkIjoiMTMwZjQ0NTAtYTVkMS00"
+    "Mzg0LTlhYTItMjJhNmJjOGZmMDI1IiwidCI6ZmFsc2UsInVpZCI6NDM4ODM3NDN9."
+    "8L_RWR4TmSHmrTwHuZNdhqnu4wYTm7H-bPg4H_zQvu7V8Y1Zqy3Tr843mTh8iHiJ"
+    "C5wjXyEZ04jixFKqrn__Lw"
+)
+
+# exp токена = 1797280092. Фиксируем "сейчас" на 161 день раньше,
+# чтобы is_active/days_left в тестах были стабильны и не зависели от даты запуска.
+BEFORE_EXP = 1797280092 - 161 * 86400
+
+
+def test_decode_jwt_returns_payload():
+    payload = decode_jwt(SAMPLE_TOKEN)
+
+    assert payload["oid"] == 4102012
+    assert payload["acc"] == 1
+    assert payload["s"] == 1073741828
+
+
+def test_decode_jwt_rejects_bad_token():
+    import pytest
+
+    with pytest.raises(ValueError):
+        decode_jwt("not-a-jwt")
+
+
+def test_has_scope():
+    bitmask = 1073741828  # Analytics (бит 2) + Read only (бит 30)
+
+    assert has_scope(bitmask, 2) is True
+    assert has_scope(bitmask, 30) is True
+    assert has_scope(bitmask, 1) is False
+
+
+def test_get_scopes():
+    scopes = get_scopes(1073741828)
+
+    assert scopes == ["Analytics", "Read only"]
+
+
+def test_token_info_external_ids():
+    info = token_info(SAMPLE_TOKEN, now=BEFORE_EXP)
+
+    assert info["cabinet_id"] == 4102012
+    assert info["user_id"] == 43883743
+
+
+def test_token_info_type_and_scopes():
+    info = token_info(SAMPLE_TOKEN, now=BEFORE_EXP)
+
+    assert info["acc_type"] == "Base"
+    assert info["scopes"] == ["Analytics", "Read only"]
+    assert info["is_read_only"] is True
+    assert info["is_test"] is False
+
+
+def test_token_info_active_before_exp():
+    info = token_info(SAMPLE_TOKEN, now=BEFORE_EXP)
+
+    assert info["is_active"] is True
+    assert info["days_left"] == 161
+
+
+def test_token_info_expired_after_exp():
+    after_exp = 1797280092 + 86400
+
+    info = token_info(SAMPLE_TOKEN, now=after_exp)
+
+    assert info["is_active"] is False
+    assert info["days_left"] < 0
